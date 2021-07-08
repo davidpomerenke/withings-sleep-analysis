@@ -1,9 +1,10 @@
 module Main exposing (..)
 
+-- import Data exposing (data)
+
 import Browser
 import Colors.Opaque exposing (..)
 import Csv.Decode as Decode
--- import Data exposing (data)
 import Element exposing (..)
 import Element.Background as Background
 import Element.Input as Input
@@ -24,6 +25,20 @@ import Widget.Icon as Icon
 import Widget.Material as Material
 import Zip
 import Zip.Entry
+
+
+
+---- PROGRAM ----
+
+
+main : Program () Model Msg
+main =
+    Browser.element
+        { view = view
+        , init = \_ -> init
+        , update = update
+        , subscriptions = always Sub.none
+        }
 
 
 
@@ -60,54 +75,6 @@ type Msg
     | GotZip (List TimeSpanByDay)
 
 
-readSleepData : File -> Task Never String
-readSleepData =
-    File.toBytes
-        >> Task.map
-            (Zip.fromBytes
-                >> Maybe.map (Zip.getEntry "sleep.csv")
-                >> Maybe.join
-                >> Maybe.map
-                    (Zip.Entry.toString
-                        >> Result.withDefault ""
-                    )
-                >> Maybe.withDefault ""
-            )
-
-
-parseDate : String -> Maybe Time.Posix
-parseDate =
-    Iso8601.toTime >> Result.toMaybe
-
-
-millisPerDay =
-    24 * 60 * 60 * 1000
-
-
-toDay : Time.Posix -> Int
-toDay =
-    Time.posixToMillis >> toFloat >> (\a -> a / millisPerDay) >> floor
-
-
-toTimeOfDay : Time.Posix -> Int
-toTimeOfDay a =
-    Time.posixToMillis a - (toDay a * millisPerDay)
-
-
-splitByDay : List (TimeSpan Time.Posix) -> List TimeSpanByDay
-splitByDay =
-    List.concatMap
-        (\{ from, to } ->
-            if toDay from == toDay to then
-                [ TimeSpanByDay (toDay from) (toTimeOfDay from) (toTimeOfDay to) ]
-
-            else
-                [ TimeSpanByDay (toDay from) (toTimeOfDay from) millisPerDay
-                , TimeSpanByDay (toDay to) 0 (toTimeOfDay to)
-                ]
-        )
-
-
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
@@ -135,11 +102,59 @@ update msg model =
             )
 
 
+readSleepData : File -> Task Never String
+readSleepData =
+    File.toBytes
+        >> Task.map
+            (Zip.fromBytes
+                >> Maybe.map (Zip.getEntry "sleep.csv")
+                >> Maybe.join
+                >> Maybe.map
+                    (Zip.Entry.toString
+                        >> Result.withDefault ""
+                    )
+                >> Maybe.withDefault ""
+            )
+
+
 decoder : Decode.Decoder (TimeSpan String)
 decoder =
     Decode.into TimeSpan
         |> Decode.pipeline (Decode.field "from" Decode.string)
         |> Decode.pipeline (Decode.field "to" Decode.string)
+
+
+parseDate : String -> Maybe Time.Posix
+parseDate =
+    Iso8601.toTime >> Result.toMaybe
+
+
+splitByDay : List (TimeSpan Time.Posix) -> List TimeSpanByDay
+splitByDay =
+    List.concatMap
+        (\{ from, to } ->
+            if toDay from == toDay to then
+                [ TimeSpanByDay (toDay from) (toTimeOfDay from) (toTimeOfDay to) ]
+
+            else
+                [ TimeSpanByDay (toDay from) (toTimeOfDay from) millisPerDay
+                , TimeSpanByDay (toDay to) 0 (toTimeOfDay to)
+                ]
+        )
+
+
+toDay : Time.Posix -> Int
+toDay =
+    Time.posixToMillis >> toFloat >> (\a -> a / millisPerDay) >> floor
+
+
+millisPerDay =
+    24 * 60 * 60 * 1000
+
+
+toTimeOfDay : Time.Posix -> Int
+toTimeOfDay a =
+    Time.posixToMillis a - (toDay a * millisPerDay)
 
 
 
@@ -169,14 +184,15 @@ view model =
                                 (let
                                     widgetHeight =
                                         toFloat (List.length (List.uniqueBy .day content) * (barHeight + barDist))
+
                                     minDay =
                                         List.foldl1 min (List.map .day content) |> Maybe.withDefault 0
 
                                     toX a =
-                                        toFloat a / millisPerDay * width_
+                                        toFloat a / millisPerDay * widgetWidth
                                  in
                                  Widget.icon "Analysis"
-                                    width_
+                                    widgetWidth
                                     widgetHeight
                                     (List.map
                                         (\{ day, from, to } ->
@@ -191,7 +207,7 @@ view model =
         )
 
 
-width_ =
+widgetWidth =
     500
 
 
@@ -207,20 +223,6 @@ bar ( x, y ) barWidth widgetHeight =
     rect barWidth barHeight
         |> filled GraphicSVG.blue
         |> move
-            ( -width_ / 2 + x + barWidth / 2
+            ( -widgetWidth / 2 + x + barWidth / 2
             , widgetHeight / 2 + y + barHeight / 2
             )
-
-
-
----- PROGRAM ----
-
-
-main : Program () Model Msg
-main =
-    Browser.element
-        { view = view
-        , init = \_ -> init
-        , update = update
-        , subscriptions = always Sub.none
-        }
