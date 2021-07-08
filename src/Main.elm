@@ -49,14 +49,16 @@ main =
 
 
 type alias Model =
-    { csv : Maybe (List TimeSpanByDay)
+    { csv : Result String (List TimeSpanByDay)
     , hover : Bool
     }
 
 
 init : ( Model, Cmd Msg )
 init =
-    ( { csv = Nothing, hover = False }
+    ( { csv = Err "Please upload something."
+      , hover = False
+      }
     , Cmd.none
     )
 
@@ -80,7 +82,8 @@ type Msg
     | DragEnter
     | DragLeave
     | GotFiles File (List File)
-    | GotData (List TimeSpanByDay)
+    | GotData (Result String (List TimeSpanByDay))
+    | NoOp
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -88,7 +91,7 @@ update msg model =
     case msg of
         Pick ->
             ( model
-            , Select.file [ "application/zip" ] (\a -> GotFiles a [])
+            , Select.files [ "application/zip" ] GotFiles
             )
 
         DragEnter ->
@@ -101,38 +104,57 @@ update msg model =
             , Cmd.none
             )
 
-        GotFiles file files ->
+        GotFiles file [] ->
             ( model
             , readSleepData file
                 |> Task.map
-                    (Csv.Decode.decodeCsv Csv.Decode.FieldNamesFromFirstRow csvDecoder
-                        >> Result.withDefault []
-                        >> List.map (\{ from, to } -> Maybe.map2 TimeSpan (parseDate from) (parseDate to))
-                        >> Maybe.values
-                        >> splitByDay
+                    (Result.map
+                        (Csv.Decode.decodeCsv Csv.Decode.FieldNamesFromFirstRow csvDecoder
+                            >> Result.withDefault []
+                            >> List.map (\{ from, to } -> Maybe.map2 TimeSpan (parseDate from) (parseDate to))
+                            >> Maybe.combine
+                            >> Result.fromMaybe "Error parsing CSV file. Sorry."
+                            >> Result.map splitByDay
+                        )
+                        >> Result.join
                     )
                 |> Task.perform GotData
             )
 
-        GotData content ->
-            ( { model | csv = Just content }
+        GotFiles file _ ->
+            ( { model | csv = Err "Please upload only the Zip file.", hover = False }
+            ,  Cmd.none
+            )
+
+        GotData (Ok content) ->
+            ( { model | csv = Ok content }
             , Cmd.none
             )
 
+        GotData (Err e) ->
+            ( { model | csv = Err e, hover = False }, Cmd.none )
 
-readSleepData : File -> Task Never String
-readSleepData =
-    File.toBytes
-        >> Task.map
-            (Zip.fromBytes
-                >> Maybe.map (Zip.getEntry "sleep.csv")
-                >> Maybe.join
-                >> Maybe.map
-                    (Zip.Entry.toString
-                        >> Result.withDefault ""
-                    )
-                >> Maybe.withDefault ""
-            )
+        NoOp ->
+            ( model, Cmd.none )
+
+
+readSleepData : File -> Task Never (Result String String)
+readSleepData file =
+    if File.mime file == "application/zip" then
+        File.toBytes file
+            |> Task.map
+                (Zip.fromBytes
+                    >> Maybe.map (Zip.getEntry "sleep.csv")
+                    >> Maybe.join
+                    >> Maybe.map
+                        (Zip.Entry.toString
+                            >> Result.mapError (\_ -> "Error with extracting the content from the Zip entry. Sorry.")
+                        )
+                    >> Maybe.withDefault (Err "Error reading the Zip archive. Sorry.")
+                )
+
+    else
+        Task.succeed (Err "Please upload the Zip file.")
 
 
 csvDecoder : Csv.Decode.Decoder (TimeSpan String)
@@ -184,42 +206,43 @@ view model =
     layout [ padding 30 ]
         (Element.column [ width (fill |> maximum 600), centerX ]
             [ case model.csv of
-                Nothing ->
-                    uploadField model
+                Err err ->
+                    uploadField err model
 
-                Just content ->
+                Ok content ->
                     vis content
             ]
         )
 
 
-uploadField model =
-    el
-        [ width fill
-        , padding 30
-        , Border.dashed
-        , Border.width 4
-        , Border.color
-            (if model.hover then
-                Colors.black
+uploadField err model =
+    Element.column [ width fill, spacing 30 ]
+        [ el
+            [ width fill
+            , padding 30
+            , Border.dashed
+            , Border.width 4
+            , Border.color
+                (if model.hover then
+                    Colors.purple
 
-             else
-                Colors.lightgray
+                 else
+                    Colors.lightgray
+                )
+            , htmlAttribute (hijackOn "dragenter" (Json.Decode.succeed DragEnter))
+            , htmlAttribute (hijackOn "dragover" (Json.Decode.succeed DragEnter))
+            , htmlAttribute (hijackOn "dragleave" (Json.Decode.succeed DragLeave))
+            , htmlAttribute (hijackOn "drop" dropDecoder)
+            ]
+            (el [ centerX ]
+                (textButton (Material.containedButton Material.defaultPalette)
+                    { text = "Upload Zip Archive"
+                    , onPress = Just Pick
+                    }
+                )
             )
-        , htmlAttribute (hijackOn "dragenter" (Json.Decode.succeed DragEnter))
-        , htmlAttribute (hijackOn "dragover" (Json.Decode.succeed DragEnter))
-        , htmlAttribute (hijackOn "dragleave" (Json.Decode.succeed DragLeave))
-        , htmlAttribute (hijackOn "drop" dropDecoder)
+        , paragraph [] [ Element.text err ]
         ]
-        (el [ centerX ]
-            (textButton (Material.containedButton Material.defaultPalette)
-                { text = "Upload Archive"
-
-                -- , icon = Material.Icons.favorite |> Icon.elmMaterialIcons Color
-                , onPress = Just Pick
-                }
-            )
-        )
 
 
 hijackOn : String -> Json.Decode.Decoder msg -> Html.Attribute msg
