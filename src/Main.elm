@@ -123,7 +123,7 @@ update msg model =
 
         GotFiles file _ ->
             ( { model | csv = Err "Please upload only the Zip file.", hover = False }
-            ,  Cmd.none
+            , Cmd.none
             )
 
         GotData (Ok content) ->
@@ -278,7 +278,7 @@ vis content =
                 widgetHeight
                 (List.map
                     (\{ day, from, to } ->
-                        bar ( toX from, toFloat (day - minDay) * -(barHeight + barDist) ) (toX (to - from)) widgetHeight
+                        bar ( toX from, toFloat (day - minDay) * (barHeight + barDist) ) (toX (to - from)) widgetHeight
                     )
                     content
                 )
@@ -303,5 +303,5 @@ bar ( x, y ) barWidth widgetHeight =
         |> filled GraphicSVG.blue
         |> move
             ( -widgetWidth / 2 + x + barWidth / 2
-            , widgetHeight / 2 + y + barHeight / 2
+            , -widgetHeight / 2 + y + barHeight / 2
             )
