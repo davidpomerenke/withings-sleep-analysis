@@ -347,7 +347,7 @@ dropDecoder =
 
 
 vis content =
-    el []
+    el [El.width El.fill]
         (El.html
             (let
                 widgetHeight =
@@ -360,8 +360,9 @@ vis content =
                     toFloat a / millisPerDay * widgetWidth
              in
              svg
-                [ Svg.width (Svg.px widgetWidth)
+                [ Svg.width (Percent 100)
                 , Svg.height (Svg.px widgetHeight)
+                , viewBox 0 0 widgetWidth widgetHeight
                 ]
                 (List.map
                     (\{ day, from, to, stage } ->
