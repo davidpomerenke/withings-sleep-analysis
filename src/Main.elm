@@ -366,9 +366,6 @@ vis content =
 
                 minDay =
                     List.foldl1 Basics.min (List.map .day content) |> Maybe.withDefault 0
-
-                toX a =
-                    toFloat a / millisPerDay * widgetWidth
              in
              svg
                 [ Svg.width (Percent 100)
@@ -378,31 +375,31 @@ vis content =
                 (List.map
                     (\{ day, from, to, stage } ->
                         bar (toColor stage)
-                            ( toX from
+                            ( toX 0 from
                             , toFloat (day - minDay) * (barHeight + barDist)
                             )
-                            ( toX (to - from)
-                            , widgetHeight
-                            )
+                            (toX 0 (to - from))
+                            widgetHeight
                     )
                     content
-                    ++ [ Path.element
-                            (Shape.line Shape.monotoneInYCurve
-                                (List.map
-                                    (\( day, value ) ->
-                                        Just
-                                            ( toX value + 2
-                                            , widgetHeight - (toFloat (day - minDay) * (barHeight + barDist)) + 0.5 * barHeight
-                                            )
-                                    )
-                                    (Dict.toList (histogram content))
-                                )
-                            )
-                            [ noFill, strokeWidth (Svg.px 2), stroke (Paint black) ]
+                    ++ [ curve (always True) black minDay widgetHeight content
+                       , curve ((/=) Awake) black minDay widgetHeight content
+                       , curve ((==) Awake) (toColor Awake) minDay widgetHeight content
+                       , curve ((==) Light) (toColor Light) minDay widgetHeight content
+                       , curve ((==) Deep) (toColor Deep) minDay widgetHeight content
+                       , curve ((==) Rem_) (toColor Rem_) minDay widgetHeight content
                        ]
                 )
             )
         )
+
+
+toX i a =
+    let
+        n =
+            2
+    in
+    toFloat a / millisPerDay * widgetWidth / n + i * widgetWidth / n
 
 
 widgetWidth =
@@ -417,8 +414,8 @@ barDist =
     10
 
 
-bar : Color.Color -> ( Float, Float ) -> ( Float, Float ) -> Svg Msg
-bar color ( x_, y_ ) ( barWidth, widgetHeight ) =
+bar : Color.Color -> ( Float, Float ) -> Float -> Float -> Svg Msg
+bar color ( x_, y_ ) barWidth widgetHeight =
     rect
         [ x (Svg.px x_)
         , y (Svg.px (widgetHeight - y_))
@@ -445,11 +442,43 @@ toColor stage =
             purple
 
 
-histogram : List TimespanByDay -> Dict Day Int
-histogram data =
+curve f color minDay widgetHeight content =
+    Path.element
+        (Shape.line Shape.monotoneInYCurve
+            (List.map
+                (\( day, value ) ->
+                    Just
+                        ( toX 1 value + 2
+                        , widgetHeight
+                            - toFloat (day - minDay)
+                            * (barHeight + barDist)
+                            + 0.5
+                            * barHeight
+                        )
+                )
+                (Dict.toList (histogram f content))
+            )
+        )
+        [ noFill, strokeWidth (Svg.px 2), stroke (Paint color) ]
+
+
+histogram : (Stage -> Bool) -> List TimespanByDay -> Dict Day Int
+histogram f data =
     List.foldl
-        (\{ day, from, to } d ->
-            Dict.update day (\v -> Just (Maybe.withDefault 0 v + (to - from))) d
+        (\a d ->
+            Dict.update a.day
+                (\v ->
+                    Just
+                        (Maybe.withDefault 0 v
+                            + (if f a.stage then
+                                a.to - a.from
+
+                               else
+                                0
+                              )
+                        )
+                )
+                d
         )
         -- populate empty days in between with zeros:
         (Maybe.map2 List.range
