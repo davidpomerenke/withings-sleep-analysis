@@ -208,16 +208,12 @@ toTimespan : ParsedRawData -> List (Timespan Time.Posix)
 toTimespan { start, duration, value } =
     List.foldl
         (\( duration_, value_ ) acc ->
-            let
-                new =
-                    { from = start
-                    , to = add (1000 * duration_) start
-                    , stage = value_
-                    }
-            in
             case acc of
                 [] ->
-                    [ new
+                    [ { from = start
+                      , to = add (1000 * duration_) start
+                      , stage = value_
+                      }
                     ]
 
                 prev :: rest ->
@@ -225,7 +221,12 @@ toTimespan { start, duration, value } =
                         { prev | to = add (1000 * duration_) prev.to } :: rest
 
                     else
-                        new :: prev :: rest
+                        { from = prev.to
+                        , to = add (1000 * duration_) prev.to
+                        , stage = value_
+                        }
+                            :: prev
+                            :: rest
         )
         []
         (List.zip duration value)
@@ -403,7 +404,7 @@ toColor : Stage -> GraphicSVG.Color
 toColor stage =
     case stage of
         Awake ->
-            yellow
+            gray
 
         Light ->
             lightBlue
