@@ -290,7 +290,7 @@ toTimeOfDay a =
 
 view : Model -> Html Msg
 view model =
-    layout [ padding 30 ]
+    layout [ paddingXY 0 30 ]
         (Element.column [ width (fill |> maximum 600), centerX ]
             [ case model.csv of
                 Err err ->
@@ -303,7 +303,7 @@ view model =
 
 
 uploadField err model =
-    Element.column [ width fill, spacing 30 ]
+    Element.column [ width fill, spacing 30, padding 30 ]
         [ el
             [ width fill
             , padding 30
@@ -380,15 +380,15 @@ vis content =
 
 
 widgetWidth =
-    500
+    800
 
 
 barHeight =
-    10
+    20
 
 
 barDist =
-    5
+    10
 
 
 bar ( x, y ) stage barWidth widgetHeight =
