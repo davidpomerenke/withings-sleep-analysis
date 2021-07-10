@@ -1,30 +1,29 @@
 module Main exposing (..)
 
--- import Data exposing (data)
+-- import Data exposing (Stage(..), data)
 
 import Browser
+import Color exposing (..)
 import Colors.Opaque as Colors
 import Csv.Decode
-import Element exposing (..)
-import Element.Background as Background
+import Element as El exposing (..)
 import Element.Border as Border
-import Element.Input as Input
 import File exposing (File)
 import File.Select as Select
-import GraphicSVG exposing (..)
-import GraphicSVG.Widget as Widget
 import Html exposing (Html)
 import Html.Events exposing (preventDefaultOn)
 import Iso8601
 import Json.Decode
 import List.Extra as List
-import Material.Icons
 import Maybe.Extra as Maybe
 import Result.Extra as Result
 import Task exposing (Task)
 import Time
+import TypedSvg as Svg exposing (..)
+import TypedSvg.Attributes as Svg exposing (..)
+import TypedSvg.Core exposing (Svg)
+import TypedSvg.Types as Svg exposing (..)
 import Widget exposing (..)
-import Widget.Icon as Icon
 import Widget.Material as Material
 import Zip
 import Zip.Entry
@@ -90,7 +89,7 @@ type Stage
     = Awake
     | Light
     | Deep
-    | Rem
+    | Rem_
 
 
 
@@ -245,7 +244,7 @@ toStage i =
             Just Deep
 
         3 ->
-            Just Rem
+            Just Rem_
 
         _ ->
             Nothing
@@ -291,7 +290,7 @@ toTimeOfDay a =
 view : Model -> Html Msg
 view model =
     layout [ paddingXY 0 30 ]
-        (Element.column [ width (fill |> maximum 600), centerX ]
+        (El.column [ El.width (El.fill |> maximum widgetWidth), centerX ]
             [ case model.csv of
                 Err err ->
                     uploadField err model
@@ -303,9 +302,9 @@ view model =
 
 
 uploadField err model =
-    Element.column [ width fill, spacing 30, padding 30 ]
+    El.column [ El.width El.fill, El.spacing 30, padding 30 ]
         [ el
-            [ width fill
+            [ El.width El.fill
             , padding 30
             , Border.dashed
             , Border.width 4
@@ -328,7 +327,7 @@ uploadField err model =
                     }
                 )
             )
-        , paragraph [] [ Element.text err ]
+        , paragraph [] [ El.text err ]
         ]
 
 
@@ -349,29 +348,30 @@ dropDecoder =
 
 vis content =
     el []
-        (Element.html
+        (El.html
             (let
                 widgetHeight =
                     toFloat (List.length (List.uniqueBy .day content) * (barHeight + barDist))
 
                 minDay =
-                    List.foldl1 min (List.map .day content) |> Maybe.withDefault 0
+                    List.foldl1 Basics.min (List.map .day content) |> Maybe.withDefault 0
 
                 toX a =
                     toFloat a / millisPerDay * widgetWidth
              in
-             Widget.icon "Analysis"
-                widgetWidth
-                widgetHeight
+             svg
+                [ Svg.width (Svg.px widgetWidth)
+                , Svg.height (Svg.px widgetHeight)
+                ]
                 (List.map
                     (\{ day, from, to, stage } ->
-                        bar
+                        bar stage
                             ( toX from
                             , toFloat (day - minDay) * (barHeight + barDist)
                             )
-                            stage
-                            (toX (to - from))
-                            widgetHeight
+                            ( toX (to - from)
+                            , widgetHeight
+                            )
                     )
                     content
                 )
@@ -391,19 +391,21 @@ barDist =
     10
 
 
-bar ( x, y ) stage barWidth widgetHeight =
-    rect barWidth barHeight
-        |> filled (toColor stage)
-        |> move
-            ( -widgetWidth / 2 + x + barWidth / 2
-            , -widgetHeight / 2 + y + barHeight / 2
-            )
+bar : Stage -> ( Float, Float ) -> ( Float, Float ) -> Svg Msg
+bar stage ( x_, y_ ) ( barWidth, widgetHeight ) =
+    rect
+        [ x (Svg.px x_)
+        , y (Svg.px (widgetHeight - y_))
+        , Svg.width (Svg.px barWidth)
+        , Svg.height (Svg.px barHeight)
+        , Svg.fill (Paint (toColor stage))
+        ]
+        []
 
 
-toColor : Stage -> GraphicSVG.Color
+toColor : Stage -> Color.Color
 toColor stage =
     case stage of
-    
         Awake ->
             gray
 
@@ -413,5 +415,9 @@ toColor stage =
         Deep ->
             blue
 
-        Rem ->
+        Rem_ ->
             purple
+
+
+distances =
+    [ 1, 2, 4, 7, 2 * 7, 4 * 7, 7 * 7, 13 * 7, 26 * 7, 52 * 7 ]
