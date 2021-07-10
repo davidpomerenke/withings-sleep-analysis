@@ -1,10 +1,6 @@
 # Withings Sleep Analysis
 
-[`Withings Sleep (Analyzer)`](https://www.withings.com/nl/en/sleep-analyzer) is the most accurate sleep tracker for people with [Narcolepsy](https://www.nhs.uk/conditions/narcolepsy/). The dashboard in the app, however, does not properly incorporate naps. This project is an attempt to build a dashboard which does. 
-
-Unfortunately, it turns out that the app does not export all relevant data. For example, information about the time of breaks during sleep periods is shown in the app, but cannot be reconstructed from the exported data. Work on this project is therefore on hold.
-
-In addition to the export functionality, there is also an [API](https://developer.withings.com/developer-guide/) by Withings. Future work could explore whether the API does provide all relevant data. [Struggles with the API](https://gist.github.com/katemonkeys/e17580777b57915f5068) have been documented.
+[`Withings Sleep (Analyzer)`](https://www.withings.com/nl/en/sleep-analyzer) is the most accurate sleep tracker for people with [Narcolepsy](https://www.nhs.uk/conditions/narcolepsy/). The dashboard in the app, however, does not properly incorporate naps. This project is an attempt at building a dashboard which does.
 
 ## Usage
 

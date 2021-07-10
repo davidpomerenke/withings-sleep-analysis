@@ -403,6 +403,7 @@ bar ( x, y ) stage barWidth widgetHeight =
 toColor : Stage -> GraphicSVG.Color
 toColor stage =
     case stage of
+    
         Awake ->
             gray
 
