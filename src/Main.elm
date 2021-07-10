@@ -6,6 +6,7 @@ import Browser
 import Color exposing (..)
 import Colors.Opaque as Colors
 import Csv.Decode
+import Dict exposing (Dict)
 import Element as El exposing (..)
 import Element.Border as Border
 import File exposing (File)
@@ -16,7 +17,9 @@ import Iso8601
 import Json.Decode
 import List.Extra as List
 import Maybe.Extra as Maybe
+import Path
 import Result.Extra as Result
+import Shape
 import Task exposing (Task)
 import Time
 import TypedSvg as Svg exposing (..)
@@ -70,11 +73,19 @@ type alias Timespan a =
 
 
 type alias TimespanByDay =
-    { day : Int
-    , from : Int
-    , to : Int
+    { day : Day
+    , from : TimeOfDay
+    , to : TimeOfDay
     , stage : Stage
     }
+
+
+type alias Day =
+    Int
+
+
+type alias TimeOfDay =
+    Int
 
 
 type alias UnparsedRawData =
@@ -347,7 +358,7 @@ dropDecoder =
 
 
 vis content =
-    el [El.width El.fill]
+    el [ El.width El.fill ]
         (El.html
             (let
                 widgetHeight =
@@ -366,7 +377,7 @@ vis content =
                 ]
                 (List.map
                     (\{ day, from, to, stage } ->
-                        bar stage
+                        bar (toColor stage)
                             ( toX from
                             , toFloat (day - minDay) * (barHeight + barDist)
                             )
@@ -375,6 +386,20 @@ vis content =
                             )
                     )
                     content
+                    ++ [ Path.element
+                            (Shape.line Shape.monotoneInYCurve
+                                (List.map
+                                    (\( day, value ) ->
+                                        Just
+                                            ( toX value + 2
+                                            , widgetHeight - (toFloat (day - minDay) * (barHeight + barDist)) + 0.5 * barHeight
+                                            )
+                                    )
+                                    (Dict.toList (histogram content))
+                                )
+                            )
+                            [ noFill, strokeWidth (Svg.px 2), stroke (Paint black) ]
+                       ]
                 )
             )
         )
@@ -392,14 +417,14 @@ barDist =
     10
 
 
-bar : Stage -> ( Float, Float ) -> ( Float, Float ) -> Svg Msg
-bar stage ( x_, y_ ) ( barWidth, widgetHeight ) =
+bar : Color.Color -> ( Float, Float ) -> ( Float, Float ) -> Svg Msg
+bar color ( x_, y_ ) ( barWidth, widgetHeight ) =
     rect
         [ x (Svg.px x_)
         , y (Svg.px (widgetHeight - y_))
         , Svg.width (Svg.px barWidth)
         , Svg.height (Svg.px barHeight)
-        , Svg.fill (Paint (toColor stage))
+        , Svg.fill (Paint color)
         ]
         []
 
@@ -418,6 +443,23 @@ toColor stage =
 
         Rem_ ->
             purple
+
+
+histogram : List TimespanByDay -> Dict Day Int
+histogram data =
+    List.foldl
+        (\{ day, from, to } d ->
+            Dict.update day (\v -> Just (Maybe.withDefault 0 v + (to - from))) d
+        )
+        -- populate empty days in between with zeros:
+        (Maybe.map2 List.range
+            (List.foldl1 Basics.min (List.map .day data))
+            (List.foldl1 Basics.max (List.map .day data))
+            |> Maybe.withDefault []
+            |> List.map (\a -> ( a, 0 ))
+            |> Dict.fromList
+        )
+        data
 
 
 distances =
