@@ -396,10 +396,17 @@ vis content =
 
 toX i a =
     let
-        n =
-            2
+        shares =
+            [ 5, 1 ]
     in
-    toFloat a / millisPerDay * widgetWidth / n + i * widgetWidth / n
+    (List.sum (List.take i shares)
+        + (toFloat a
+            / millisPerDay
+            * (List.getAt i shares |> Maybe.withDefault 1)
+          )
+    )
+        * widgetWidth
+        / List.sum shares
 
 
 widgetWidth =
