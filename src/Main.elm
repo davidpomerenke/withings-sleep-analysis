@@ -286,7 +286,15 @@ toDay =
 
 
 millisPerDay =
-    24 * 60 * 60 * 1000
+    24 * millisPerHour
+
+
+millisPerHour =
+    60 * millisPerMinute
+
+
+millisPerMinute =
+    60 * 1000
 
 
 toTimeOfDay : Time.Posix -> Int
@@ -362,7 +370,7 @@ vis content =
         (El.html
             (let
                 widgetHeight =
-                    toFloat (List.length (List.uniqueBy .day content) * (barHeight + barDist))
+                    toFloat (List.length (days content) * (barHeight + barDist))
 
                 minDay =
                     List.foldl1 Basics.min (List.map .day content) |> Maybe.withDefault 0
@@ -382,12 +390,23 @@ vis content =
                             widgetHeight
                     )
                     content
-                    ++ [ curve (always True) black minDay widgetHeight content
-                       , curve ((/=) Awake) black minDay widgetHeight content
-                       , curve ((==) Awake) (toColor Awake) minDay widgetHeight content
-                       , curve ((==) Light) (toColor Light) minDay widgetHeight content
-                       , curve ((==) Deep) (toColor Deep) minDay widgetHeight content
-                       , curve ((==) Rem_) (toColor Rem_) minDay widgetHeight content
+                    ++ [ rightCurve (always True) black minDay widgetHeight content
+                       , rightCurve ((/=) Awake) black minDay widgetHeight content
+                       , rightCurve ((==) Awake) (toColor Awake) minDay widgetHeight content
+                       , rightCurve ((==) Light) (toColor Light) minDay widgetHeight content
+                       , rightCurve ((==) Deep) (toColor Deep) minDay widgetHeight content
+                       , rightCurve ((==) Rem_) (toColor Rem_) minDay widgetHeight content
+                       , curve black
+                            Shape.monotoneInXCurve
+                            (List.map
+                                (\( hour, frequency ) ->
+                                    Just
+                                        ( toX 0 (hour * millisPerHour)
+                                        , widgetHeight - frequency / toFloat (List.length (days content)) * widgetHeight
+                                        )
+                                )
+                                (Dict.toList (hourlyHistogram (always True) content))
+                            )
                        ]
                 )
             )
@@ -449,28 +468,32 @@ toColor stage =
             purple
 
 
-curve f color minDay widgetHeight content =
-    Path.element
-        (Shape.line Shape.monotoneInYCurve
-            (List.map
-                (\( day, value ) ->
-                    Just
-                        ( toX 1 value + 2
-                        , widgetHeight
-                            - toFloat (day - minDay)
-                            * (barHeight + barDist)
-                            + 0.5
-                            * barHeight
-                        )
-                )
-                (Dict.toList (histogram f content))
+rightCurve f color minDay widgetHeight content =
+    curve color
+        Shape.monotoneInYCurve
+        (List.map
+            (\( day, value ) ->
+                Just
+                    ( toX 1 value + 2
+                    , widgetHeight
+                        - toFloat (day - minDay)
+                        * (barHeight + barDist)
+                        + 0.5
+                        * barHeight
+                    )
             )
+            (Dict.toList (dailyAggregate f content))
         )
+
+
+curve color type_ points =
+    Path.element
+        (Shape.line type_ points)
         [ noFill, strokeWidth (Svg.px 2), stroke (Paint color) ]
 
 
-histogram : (Stage -> Bool) -> List TimespanByDay -> Dict Day Int
-histogram f data =
+dailyAggregate : (Stage -> Bool) -> List TimespanByDay -> Dict Day Int
+dailyAggregate f data =
     List.foldl
         (\a d ->
             Dict.update a.day
@@ -488,10 +511,54 @@ histogram f data =
                 d
         )
         -- populate empty days in between with zeros:
-        (Maybe.map2 List.range
-            (List.foldl1 Basics.min (List.map .day data))
-            (List.foldl1 Basics.max (List.map .day data))
-            |> Maybe.withDefault []
+        (days data
+            |> List.map (\a -> ( a, 0 ))
+            |> Dict.fromList
+        )
+        data
+
+
+days : List TimespanByDay -> List Int
+days data =
+    Maybe.map2 List.range
+        (List.foldl1 Basics.min (List.map .day data))
+        (List.foldl1 Basics.max (List.map .day data))
+        |> Maybe.withDefault []
+
+
+hourlyHistogram : (Stage -> Bool) -> List TimespanByDay -> Dict Int Float
+hourlyHistogram f data =
+    List.foldl
+        (\a d ->
+            let
+                updateWholeHours d_ =
+                    List.foldl
+                        (\hour ->
+                            Dict.update hour (Maybe.map ((+) 1))
+                        )
+                        d_
+                        (List.range
+                            (ceiling (toFloat a.from / millisPerHour))
+                            (floor (toFloat a.to / millisPerHour) - 1)
+                        )
+
+                updatePartialHour x =
+                    Dict.update
+                        (floor (toFloat x / millisPerHour))
+                        (Maybe.map
+                            ((+)
+                                ((toFloat x / millisPerHour)
+                                    - toFloat (floor (toFloat x / millisPerHour))
+                                )
+                            )
+                        )
+            in
+            d
+                |> updateWholeHours
+                -- |> updatePartialHour a.from
+                -- |> updatePartialHour a.to
+        )
+        (List.range 0 23
             |> List.map (\a -> ( a, 0 ))
             |> Dict.fromList
         )
